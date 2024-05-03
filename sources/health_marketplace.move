@@ -9,9 +9,6 @@ module Health::health_marketplace {
     
     use std::string::{Self, String};
 
-    const MALE: u8 = 0;
-    const FAMALE: u8 = 1;
-
     const ERROR_INVALID_GENDER: u64 = 0;
     const ERROR_INVALID_ACCESS: u64 = 1;
     const ERROR_INSUFFICIENT_FUNDS: u64 = 2;
@@ -24,7 +21,7 @@ module Health::health_marketplace {
         location: String,
         contact_info: String,
         hospital_type: String,
-        bills: Table<address, Bill>,
+        bills: Table<address, Table<ID, Bill>>,
         balance: Balance<SUI>
     }
 
@@ -48,14 +45,15 @@ module Health::health_marketplace {
     }
 
     // Billing Structure
-    struct Bill has copy, store, drop {
+    struct Bill has key, store {
+        id: UID,
         patient_id: ID,
         charges: u64,
         payment_date: u64,
     }
 
     // Create a new hospital
-    public fun create_hospital(name: String, location: String, contact_info: String, hospital_type: String, ctx: &mut TxContext): (Hospital, HospitalCap) {
+    public fun create_hospital(name: String, location: String, contact_info: String, hospital_type: String, ctx: &mut TxContext) : (Hospital, HospitalCap) {
         let id_ = object::new(ctx);
         let inner_ = object::uid_to_inner(&id_);
         let hospital = Hospital {
@@ -94,15 +92,23 @@ module Health::health_marketplace {
     // Generate a detailed bill for a patient
     public fun generate_bill(cap: &HospitalCap, hospital: &mut Hospital, patient_id: ID, charges: u64, date: u64, c: &Clock, ctx: &mut TxContext) {
         assert!(cap.hospital == object::id(hospital), ERROR_INVALID_ACCESS);
+        let id_ = object::new(ctx);
+        let inner_ = object::uid_to_inner(&id_);
         let bill = Bill {
+            id: id_,
             patient_id,
             charges,
             payment_date: timestamp_ms(c) + date,
         };
-        table::add(&mut hospital.bills, sender(ctx), bill);
+        if (!table::contains(&hospital.bills, sender(ctx))) {
+            let table = table::new<ID, Bill>(ctx);
+            table::add(&mut hospital.bills, sender(ctx),table);
+        };
+        let user_table = table::borrow_mut(&mut hospital.bills, sender(ctx));
+        table::add(user_table, inner_, bill);
     }
 
-    // // Pay a bill
+    // Pay a bill
     public fun pay_bill(hospital: &mut Hospital, patient: &mut Patient, coin: Coin<SUI>, c: &Clock, ctx: &mut TxContext) {
         let bill = table::remove(&mut hospital.bills, sender(ctx));
         assert!(coin::value(&coin) == bill.charges, ERROR_INSUFFICIENT_FUNDS);
