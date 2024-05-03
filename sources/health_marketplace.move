@@ -41,7 +41,6 @@ module Health::health_marketplace {
         emergency_contact: String,
         admission_reason: String,
         discharge_date: u64,
-        pay: bool
     }
 
     // Billing Structure
@@ -85,13 +84,13 @@ module Health::health_marketplace {
             emergency_contact,
             admission_reason,
             discharge_date: timestamp_ms(c) + date,
-            pay: false
         }
     }
 
     // Generate a detailed bill for a patient
     public fun generate_bill(cap: &HospitalCap, hospital: &mut Hospital, patient_id: ID, charges: u64, date: u64, c: &Clock, ctx: &mut TxContext) {
         assert!(cap.hospital == object::id(hospital), ERROR_INVALID_ACCESS);
+        let user = sender(ctx);
         let id_ = object::new(ctx);
         let inner_ = object::uid_to_inner(&id_);
         let bill = Bill {
@@ -100,24 +99,31 @@ module Health::health_marketplace {
             charges,
             payment_date: timestamp_ms(c) + date,
         };
-        if (!table::contains(&hospital.bills, sender(ctx))) {
+        if (!table::contains(&hospital.bills, user)) {
             let table = table::new<ID, Bill>(ctx);
-            table::add(&mut hospital.bills, sender(ctx),table);
+            table::add(&mut hospital.bills, user, table);
         };
-        let user_table = table::borrow_mut(&mut hospital.bills, sender(ctx));
+        let user_table = table::borrow_mut(&mut hospital.bills, user);
         table::add(user_table, inner_, bill);
     }
 
     // Pay a bill
-    public fun pay_bill(hospital: &mut Hospital, patient: &mut Patient, coin: Coin<SUI>, c: &Clock, ctx: &mut TxContext) {
-        let bill = table::remove(&mut hospital.bills, sender(ctx));
+    public fun pay_bill(hospital: &mut Hospital, patient: &mut Patient, bill: ID,  coin: Coin<SUI>, c: &Clock, ctx: &mut TxContext) {
+        let user_table = table::borrow_mut(&mut hospital.bills, sender(ctx));
+        let bill = table::remove(user_table, bill);
+        assert!(bill.patient_id == object::id(patient), ERROR_INVALID_ACCESS);
         assert!(coin::value(&coin) == bill.charges, ERROR_INSUFFICIENT_FUNDS);
         assert!(bill.payment_date < timestamp_ms(c), ERROR_INVALID_TIME);
+        let Bill {
+            id,
+            patient_id: _,
+            charges: _,
+            payment_date: _
+        } = bill;
+        object::delete(id);
         // join the balance 
         let balance_ = coin::into_balance(coin);
         balance::join(&mut hospital.balance, balance_);
-        // bill payed
-        patient.pay = true;
     }
 
     public fun withdraw(cap: &HospitalCap, hospital: &mut Hospital, ctx: &mut TxContext) : Coin<SUI> {
@@ -132,12 +138,9 @@ module Health::health_marketplace {
         balance::value(&hospital.balance)
     }
 
-    public fun get_patient_status(patient: &Patient) : bool {
-        patient.pay
-    }
-
-    public fun get_bill_amount(hospital: &Hospital, ctx: &mut TxContext) : u64 {
-        let bill = table::borrow(&hospital.bills, sender(ctx));
+    public fun get_bill_amount(hospital: &Hospital, bill: ID, ctx: &mut TxContext) : u64 {
+        let user_table = table::borrow(&hospital.bills, sender(ctx));
+        let bill = table::borrow(user_table, bill);
         bill.charges
     }
 }
