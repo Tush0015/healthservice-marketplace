@@ -8,6 +8,7 @@ module Health::health_marketplace {
     use sui::table::{Self, Table};
     
     use std::string::{Self, String};
+    use std::vector;
 
     const ERROR_INVALID_GENDER: u64 = 0;
     const ERROR_INVALID_ACCESS: u64 = 1;
@@ -22,7 +23,8 @@ module Health::health_marketplace {
         contact_info: String,
         hospital_type: String,
         bills: Table<address, Table<ID, Bill>>,
-        balance: Balance<SUI>
+        balance: Balance<SUI>,
+        bill_id: vector<ID> // For test u can delete it 
     }
 
     struct HospitalCap has key, store {
@@ -31,7 +33,7 @@ module Health::health_marketplace {
     }
 
     // Patient Structure
-    struct Patient has key {
+    struct Patient has key, store {
         id: UID,
         hospital: ID,
         name: String,
@@ -62,7 +64,8 @@ module Health::health_marketplace {
             contact_info,
             hospital_type,
             bills: table::new(ctx),
-            balance: balance::zero()
+            balance: balance::zero(),
+            bill_id:vector::empty()
         };
         let cap = HospitalCap {
             id: object::new(ctx),
@@ -88,11 +91,11 @@ module Health::health_marketplace {
     }
 
     // Generate a detailed bill for a patient
-    public fun generate_bill(cap: &HospitalCap, hospital: &mut Hospital, patient_id: ID, charges: u64, date: u64, c: &Clock, ctx: &mut TxContext) {
+    public fun generate_bill(cap: &HospitalCap, hospital: &mut Hospital, patient_id: ID, charges: u64, date: u64, c: &Clock, user: address, ctx: &mut TxContext) {
         assert!(cap.hospital == object::id(hospital), ERROR_INVALID_ACCESS);
-        let user = sender(ctx);
         let id_ = object::new(ctx);
         let inner_ = object::uid_to_inner(&id_);
+        vector::push_back(&mut hospital.bill_id, inner_);
         let bill = Bill {
             id: id_,
             patient_id,
@@ -143,4 +146,13 @@ module Health::health_marketplace {
         let bill = table::borrow(user_table, bill);
         bill.charges
     }
-}
+
+    // Test only 
+    public fun get_patient_id(self: &Patient) : ID {
+        let id_ = object::id(self);
+        id_
+    }
+   public fun get_bill_id(self: &Hospital) : ID {
+        let id_ = vector::borrow(&self.bill_id, 0);
+        *id_
+    }}
