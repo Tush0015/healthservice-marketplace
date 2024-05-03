@@ -7,7 +7,7 @@ module Health::health_marketplace {
     use sui::coin::{Self, Coin};
     use sui::table::{Self, Table};
     
-    use std::string::{String};
+    use std::string::{Self, String};
 
     const MALE: u8 = 0;
     const FAMALE: u8 = 1;
@@ -39,7 +39,7 @@ module Health::health_marketplace {
         hospital: ID,
         name: String,
         age: u64,
-        gender: u8,
+        gender: String,
         contact_info: String,
         emergency_contact: String,
         admission_reason: String,
@@ -74,9 +74,9 @@ module Health::health_marketplace {
         (hospital, cap)
     }
 
-    // // Admit a patient
-    public fun admit_patient(hospital: ID, name: String, age: u64, gender: u8, contact_info: String, emergency_contact: String, admission_reason: String, date: u64, c: &Clock, ctx: &mut TxContext): Patient {
-        assert!(gender == 0 || gender == 1, ERROR_INVALID_GENDER);
+     // Admit a patient
+    public fun admit_patient(hospital: ID, name: String, age: u64, gender: String, contact_info: String, emergency_contact: String, admission_reason: String, date: u64, c: &Clock, ctx: &mut TxContext): Patient {
+        assert!(gender == string::utf8(b"MALE") || gender == string::utf8(b"FAMALE"), ERROR_INVALID_GENDER);
         Patient {
             id: object::new(ctx),
             hospital,
